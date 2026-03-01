@@ -1,0 +1,6 @@
+cache.json
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd

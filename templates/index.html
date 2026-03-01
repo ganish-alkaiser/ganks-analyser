@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ganked Analyzer - EVE Online</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <main class="container">
+      <h1>Ganked Analyzer</h1>
+      <p class="subtitle">
+        Gank frequency by region using events tagged as "GANKED" on zKillboard.
+      </p>
+
+      <section class="controls">
+        <label>
+          Region
+          <select id="regionSelect"></select>
+        </label>
+
+        <label>
+          Start date
+          <input id="startDateInput" type="date" />
+        </label>
+
+        <label>
+          End date
+          <input id="endDateInput" type="date" />
+        </label>
+
+        <div class="preset-buttons">
+          <button id="preset7d" type="button" class="preset-btn">Last 7 days</button>
+          <button id="preset30d" type="button" class="preset-btn">Last 30 days</button>
+          <button id="presetMonth" type="button" class="preset-btn">Current month</button>
+          <button id="presetClear" type="button" class="preset-btn">Clear period</button>
+        </div>
+
+        <button id="analyzeBtn">Analyze</button>
+      </section>
+
+      <section class="metrics">
+        <article class="card">
+          <h3>Kill entries scanned</h3>
+          <p id="killsSeen">-</p>
+        </article>
+        <article class="card">
+          <h3>GANKED in period</h3>
+          <p id="gankedFound">-</p>
+        </article>
+        <article class="card">
+          <h3>With timestamp available</h3>
+          <p id="gankedWithTime">-</p>
+        </article>
+        <article class="card">
+          <h3>Peak (hour / weekday)</h3>
+          <p id="peaks">-</p>
+        </article>
+        <article class="card">
+          <h3>Data source</h3>
+          <p id="sourceInfo">-</p>
+        </article>
+      </section>
+
+      <section class="charts">
+        <div class="chart-card">
+          <h2>Distribution by hour (UTC)</h2>
+          <canvas id="hoursChart"></canvas>
+        </div>
+        <div class="chart-card">
+          <h2>Distribution by weekday</h2>
+          <canvas id="weekdaysChart"></canvas>
+        </div>
+      </section>
+
+      <p id="status"></p>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+  </body>
+  </html>
