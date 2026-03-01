@@ -387,13 +387,13 @@ def _aggregate_datetimes(items: Iterable[datetime]) -> dict:
 
     hour_data = [by_hour.get(hour, 0) for hour in range(24)]
     weekday_labels = [
-        "Segunda",
-        "Terça",
-        "Quarta",
-        "Quinta",
-        "Sexta",
-        "Sábado",
-        "Domingo",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
     ]
     weekday_data = [by_weekday.get(idx, 0) for idx in range(7)]
 
