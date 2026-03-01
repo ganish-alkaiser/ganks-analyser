@@ -113,6 +113,52 @@ button:disabled {
   margin-top: 12px;
 }
 
+.top-entities-section {
+  margin-top: 16px;
+}
+
+.top-entities-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.entity-card {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.entity-logo {
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid #334155;
+  margin-bottom: 10px;
+}
+
+.entity-name {
+  margin: 0;
+  font-size: 16px;
+}
+
+.entity-meta {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.top-entities-empty {
+  margin: 0;
+  color: #94a3b8;
+}
+
 #status {
   color: #93c5fd;
   margin-top: 14px;

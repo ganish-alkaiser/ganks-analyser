@@ -32,7 +32,12 @@ MAX_AUTO_PAGES = 200
 
 
 def _new_cache() -> dict:
-    return {"region_pages": {}, "kill_times": {}}
+    return {
+        "region_pages": {},
+        "kill_times": {},
+        "kill_attacker_alliances": {},
+        "alliance_names": {},
+    }
 
 
 def _load_cache() -> dict:
@@ -50,6 +55,8 @@ def _load_cache() -> dict:
 
     data.setdefault("region_pages", {})
     data.setdefault("kill_times", {})
+    data.setdefault("kill_attacker_alliances", {})
+    data.setdefault("alliance_names", {})
     return data
 
 
@@ -199,7 +206,7 @@ def _collect_ganked_kill_ids(
 
             if page_top_ref:
                 try:
-                    top_time, top_changed, _ = _extract_kill_time(
+                    top_time, _, top_changed, _ = _extract_kill_time(
                         int(page_top_ref["killmail_id"]),
                         str(page_top_ref["hash"]),
                         session,
@@ -276,16 +283,32 @@ def _extract_kill_time(
     session: requests.Session,
     cache: dict,
     force_refresh: bool,
-) -> tuple[datetime | None, bool, str]:
+) -> tuple[datetime | None, set[int], bool, str]:
     kill_times = cache.get("kill_times", {})
+    kill_attacker_alliances = cache.get("kill_attacker_alliances", {})
     cache_key = f"{kill_id}:{kill_hash}"
 
     if not force_refresh and cache_key in kill_times:
         cached_value = kill_times[cache_key]
+        cached_alliances = kill_attacker_alliances.get(cache_key)
+        cached_alliance_ids = set()
+        if isinstance(cached_alliances, list):
+            cached_alliance_ids = {
+                int(alliance_id)
+                for alliance_id in cached_alliances
+                if isinstance(alliance_id, int)
+                or (
+                    isinstance(alliance_id, str)
+                    and alliance_id.isdigit()
+                )
+            }
         if cached_value is None:
-            return None, False, "cache"
+            if isinstance(cached_alliances, list):
+                return None, cached_alliance_ids, False, "cache"
         try:
-            return datetime.fromisoformat(cached_value), False, "cache"
+            parsed_time = datetime.fromisoformat(cached_value)
+            if isinstance(cached_alliances, list):
+                return parsed_time, cached_alliance_ids, False, "cache"
         except ValueError:
             pass
 
@@ -299,16 +322,59 @@ def _extract_kill_time(
     data = response.json()
     if not isinstance(data, dict):
         kill_times[cache_key] = None
-        return None, True, "api"
+        kill_attacker_alliances[cache_key] = []
+        return None, set(), True, "api"
+
+    attackers = data.get("attackers", [])
+    alliance_ids: set[int] = set()
+    if isinstance(attackers, list):
+        for attacker in attackers:
+            if not isinstance(attacker, dict):
+                continue
+            alliance_id = attacker.get("alliance_id")
+            if isinstance(alliance_id, int):
+                alliance_ids.add(alliance_id)
+
+    kill_attacker_alliances[cache_key] = sorted(alliance_ids)
 
     killmail_time = data.get("killmail_time")
     if not killmail_time:
         kill_times[cache_key] = None
-        return None, True, "api"
+        return None, alliance_ids, True, "api"
 
     parsed_time = datetime.fromisoformat(killmail_time.replace("Z", "+00:00"))
     kill_times[cache_key] = parsed_time.isoformat()
-    return parsed_time, True, "api"
+    return parsed_time, alliance_ids, True, "api"
+
+
+def _get_alliance_name(
+    alliance_id: int,
+    session: requests.Session,
+    cache: dict,
+    force_refresh: bool,
+) -> tuple[str, bool, str]:
+    alliance_names = cache.get("alliance_names", {})
+    cache_key = str(alliance_id)
+
+    if not force_refresh and cache_key in alliance_names:
+        cached_name = alliance_names.get(cache_key)
+        if isinstance(cached_name, str) and cached_name:
+            return cached_name, False, "cache"
+
+    url = (
+        f"{ESI_BASE_URL}/alliances/{alliance_id}/"
+        "?datasource=tranquility"
+    )
+    response = session.get(url, timeout=20)
+    response.raise_for_status()
+
+    payload = response.json()
+    name = payload.get("name") if isinstance(payload, dict) else None
+    if not isinstance(name, str) or not name:
+        name = str(alliance_id)
+
+    alliance_names[cache_key] = name
+    return name, True, "api"
 
 
 def _aggregate_datetimes(items: Iterable[datetime]) -> dict:
@@ -452,19 +518,24 @@ def analysis():
         cache_changed = cache_changed or collect_changed
         timestamps: list[datetime] = []
         timestamps_in_period: list[datetime] = []
+        alliance_counter: Counter[int] = Counter()
         kill_times_from_api = 0
         kill_times_from_cache = 0
+        alliance_names_from_api = 0
+        alliance_names_from_cache = 0
 
         for kill_id, kill_hash in sorted(ganked_kill_refs.items()):
             if not kill_hash:
                 continue
             try:
-                kill_time, time_changed, source = _extract_kill_time(
-                    kill_id,
-                    kill_hash,
-                    session,
-                    cache,
-                    refresh,
+                kill_time, alliance_ids, time_changed, source = (
+                    _extract_kill_time(
+                        kill_id,
+                        kill_hash,
+                        session,
+                        cache,
+                        refresh,
+                    )
                 )
             except (requests.RequestException, ValueError, KeyError):
                 continue
@@ -479,7 +550,45 @@ def analysis():
                 timestamps.append(kill_time)
                 if _is_in_period(kill_time, start_date, end_date):
                     timestamps_in_period.append(kill_time)
+                    for alliance_id in alliance_ids:
+                        alliance_counter[alliance_id] += 1
             time.sleep(0.15)
+
+        top_alliances: list[dict] = []
+        for alliance_id, gank_count in alliance_counter.most_common(5):
+            try:
+                (
+                    alliance_name,
+                    alliance_changed,
+                    alliance_source,
+                ) = _get_alliance_name(
+                    alliance_id,
+                    session,
+                    cache,
+                    refresh,
+                )
+            except requests.RequestException:
+                alliance_name = str(alliance_id)
+                alliance_changed = False
+                alliance_source = "api"
+
+            cache_changed = cache_changed or alliance_changed
+            if alliance_source == "api":
+                alliance_names_from_api += 1
+            else:
+                alliance_names_from_cache += 1
+
+            top_alliances.append(
+                {
+                    "id": alliance_id,
+                    "name": alliance_name,
+                    "gank_count": gank_count,
+                    "logo_url": (
+                        f"https://images.evetech.net/alliances/{alliance_id}"
+                        "/logo?size=128"
+                    ),
+                }
+            )
 
     if cache_changed:
         _save_cache(cache)
@@ -503,7 +612,10 @@ def analysis():
                 "pages_from_cache": collect_stats["pages_from_cache"],
                 "kill_times_from_api": kill_times_from_api,
                 "kill_times_from_cache": kill_times_from_cache,
+                "alliance_names_from_api": alliance_names_from_api,
+                "alliance_names_from_cache": alliance_names_from_cache,
             },
+            "top_alliances": top_alliances,
             "hours": aggregated["hours"],
             "weekdays": aggregated["weekdays"],
         }

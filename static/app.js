@@ -16,6 +16,7 @@ const gankedFoundEl = document.getElementById("gankedFound");
 const gankedWithTimeEl = document.getElementById("gankedWithTime");
 const peaksEl = document.getElementById("peaks");
 const sourceInfoEl = document.getElementById("sourceInfo");
+const topAlliancesEl = document.getElementById("topAlliances");
 
 async function loadRegions() {
   const response = await fetch("/api/regions");
@@ -108,7 +109,46 @@ function updateMetrics(data) {
   const pagesCache = source.pages_from_cache ?? 0;
   const timesApi = source.kill_times_from_api ?? 0;
   const timesCache = source.kill_times_from_cache ?? 0;
-  sourceInfoEl.textContent = `Pages API:${pagesApi} | Cache:${pagesCache} | Times API:${timesApi} | Cache:${timesCache}`;
+  const allianceApi = source.alliance_names_from_api ?? 0;
+  const allianceCache = source.alliance_names_from_cache ?? 0;
+  sourceInfoEl.textContent = `Pages API:${pagesApi} | Cache:${pagesCache} | Times API:${timesApi} | Cache:${timesCache} | Alliance names API:${allianceApi} | Cache:${allianceCache}`;
+}
+
+function renderTopAlliances(data) {
+  const alliances = data.top_alliances || [];
+  topAlliancesEl.innerHTML = "";
+
+  if (!alliances.length) {
+    const empty = document.createElement("p");
+    empty.className = "top-entities-empty";
+    empty.textContent = "No ganking alliance data found for the selected period.";
+    topAlliancesEl.appendChild(empty);
+    return;
+  }
+
+  for (const alliance of alliances) {
+    const card = document.createElement("article");
+    card.className = "entity-card";
+
+    const image = document.createElement("img");
+    image.className = "entity-logo";
+    image.src = alliance.logo_url;
+    image.alt = `${alliance.name} logo`;
+    image.loading = "lazy";
+
+    const title = document.createElement("h3");
+    title.className = "entity-name";
+    title.textContent = alliance.name;
+
+    const meta = document.createElement("p");
+    meta.className = "entity-meta";
+    meta.textContent = `Ganks in period: ${alliance.gank_count}`;
+
+    card.appendChild(image);
+    card.appendChild(title);
+    card.appendChild(meta);
+    topAlliancesEl.appendChild(card);
+  }
 }
 
 function formatLocalDate(date) {
@@ -177,6 +217,7 @@ async function analyze() {
     }
 
     updateMetrics(payload);
+    renderTopAlliances(payload);
     renderCharts(payload);
     const periodText = payload.start_date || payload.end_date
       ? ` period: ${payload.start_date ?? "..."} to ${payload.end_date ?? "..."}`
